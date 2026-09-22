@@ -1,3 +1,4 @@
+import os
 import streamlit as st
 import pandas as pd
 import plotly.express as px
@@ -15,12 +16,25 @@ try:
 except LookupError:
     nltk.download('stopwords')
     list_stopwords = stopwords.words('indonesian')
+# Setup NLTK stopwords secara aman untuk cloud runtime
+@st.cache_resource
+def setup_nltk():
+    try:
+        nltk.data.find('corpora/stopwords')
+    except LookupError:
+        nltk.download('stopwords', quiet=True)
+
+setup_nltk()
+list_stopwords = stopwords.words('indonesian')
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 # ==========================================
 # 1. KONFIGURASI HALAMAN WEBSITE
 # ==========================================
 st.set_page_config(
     page_title="Data Science Portfolio Hub",
+    page_title="Public Opinion Sentiment Analysis",
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -172,6 +186,8 @@ st.sidebar.markdown(f"<h2 style='color:{PALETTE['platinum']}; margin-top:0; font
 dataset_mapping = {
     "Koperasi Desa Merah Putih (KDMP)": "KDMP.csv",
     "Makan Bergizi Gratis (MBG)": "MBG_PROCESSED.csv"
+    "Koperasi Desa Merah Putih (KDMP)": os.path.join(BASE_DIR, "KDMP.csv"),
+    "Makan Bergizi Gratis (MBG)": os.path.join(BASE_DIR, "MBG_PROCESSED.csv")
 }
 
 selected_project = st.sidebar.selectbox("Topik Analisis:", options=list(dataset_mapping.keys()))
