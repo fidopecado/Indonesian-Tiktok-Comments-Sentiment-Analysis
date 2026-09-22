@@ -1,21 +1,16 @@
 import os
-import streamlit as st
+import random
+import re
+from collections import Counter
+
+import matplotlib.pyplot as plt
+import nltk
 import pandas as pd
 import plotly.express as px
-import re
-import nltk
-import random
+import streamlit as st
 from nltk.corpus import stopwords
-from collections import Counter
 from wordcloud import WordCloud
-import matplotlib.pyplot as plt
 
-# Download stopwords jika belum tersedia
-try:
-    list_stopwords = stopwords.words('indonesian')
-except LookupError:
-    nltk.download('stopwords')
-    list_stopwords = stopwords.words('indonesian')
 # Setup NLTK stopwords secara aman untuk cloud runtime
 @st.cache_resource
 def setup_nltk():
@@ -38,64 +33,158 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Definisi Palet Warna Utama Proyek Anda (Light Theme Permanen)
-PALETTE = {
-    "midnight_violet": "#271f30",  # Warna teks utama & judul halaman
-    "fiery_terracotta": "#CA2E16", # Background Menu (Sidebar) & Sentimen Negatif
-    "tuscan_sun": "#f9c22e",       # Sentimen Netral
-    "platinum": "#eef0f2",         # Background Halaman Utama & Teks Sidebar
-    "fern": "#566e3d",             # Sentimen Positif
+# Definisi Presets Tema Warna (Original, E-Ink, MBG Prabowo, KDMP Prabowo, Dark Mode)
+THEMES = {
+    "Original Light (Terracotta & Violet)": {
+        "sidebar_bg": "#CA2E16",
+        "sidebar_text": "#EEF0F2",
+        "main_bg": "#EEF0F2",
+        "card_bg": "#FFFFFF",
+        "text_color": "#271F30",
+        "input_bg": "#FFFFFF",
+        "input_text": "#1E293B",
+        "positif": "#566E3D",
+        "netral": "#F9C22E",
+        "negatif": "#CA2E16",
+        "accent": "#CA2E16"
+    },
+    "E-Ink (Paper & Charcoal Monochrome)": {
+        "sidebar_bg": "#1C1C1E",
+        "sidebar_text": "#F4F4F0",
+        "main_bg": "#F5F5F0",
+        "card_bg": "#FFFFFF",
+        "text_color": "#111111",
+        "input_bg": "#FFFFFF",
+        "input_text": "#111111",
+        "positif": "#2D5A27",
+        "netral": "#7E6C46",
+        "negatif": "#8B0000",
+        "accent": "#1C1C1E"
+    },
+    "MBG Prabowo Color (Biru Muda / Sky Blue)": {
+        "sidebar_bg": "#0080FF",
+        "sidebar_text": "#FFFFFF",
+        "main_bg": "#F0F8FF",
+        "card_bg": "#FFFFFF",
+        "text_color": "#0F172A",
+        "input_bg": "#FFFFFF",
+        "input_text": "#0F172A",
+        "positif": "#10B981",
+        "netral": "#F59E0B",
+        "negatif": "#EF4444",
+        "accent": "#0080FF"
+    },
+    "KDMP Prabowo Color (Merah Putih Patriotic)": {
+        "sidebar_bg": "#C8102E",
+        "sidebar_text": "#FFFFFF",
+        "main_bg": "#F8FAFC",
+        "card_bg": "#FFFFFF",
+        "text_color": "#0F172A",
+        "input_bg": "#FFFFFF",
+        "input_text": "#0F172A",
+        "positif": "#16A34A",
+        "netral": "#D97706",
+        "negatif": "#DC2626",
+        "accent": "#C8102E"
+    },
+    "Dark Mode (Midnight Slate)": {
+        "sidebar_bg": "#0F172A",
+        "sidebar_text": "#38BDF8",
+        "main_bg": "#020617",
+        "card_bg": "#1E293B",
+        "text_color": "#F8FAFC",
+        "input_bg": "#0F172A",
+        "input_text": "#F8FAFC",
+        "positif": "#34D399",
+        "netral": "#FBBF24",
+        "negatif": "#F87171",
+        "accent": "#38BDF8"
+    }
 }
 
-# Variabel Warna Statis untuk Light Theme
-THEME_BG = PALETTE["platinum"]
-THEME_TEXT = PALETTE["midnight_violet"]
-THEME_CARD_BG = "#ffffff"
-PLOT_FONT_COLOR = PALETTE["midnight_violet"]
+# Selector Tema di Sidebar
+st.sidebar.markdown("<h2 style='margin-top:0; font-weight:800;'>🎨 Pengaturan Tema</h2>", unsafe_allow_html=True)
+selected_theme_name = st.sidebar.selectbox("Pilih Tema Warna Website:", options=list(THEMES.keys()), index=0)
+current_theme = THEMES[selected_theme_name]
 
-# Injeksi CSS Statis untuk Mengunci Tampilan Light Theme secara Absolut
+THEME_BG = current_theme["main_bg"]
+THEME_TEXT = current_theme["text_color"]
+THEME_CARD_BG = current_theme["card_bg"]
+PLOT_FONT_COLOR = current_theme["text_color"]
+
+color_map = {
+    'positif': current_theme['positif'],
+    'netral': current_theme['netral'],
+    'negatif': current_theme['negatif']
+}
+
+# Injeksi CSS Dinamis Berdasarkan Tema Terpilih & Perbaikan Range Filter Color
 st.markdown(f"""
 <style>
-    /* 1. Mengunci variabel dasar mesin Streamlit agar tidak berubah saat mode gelap diaktifkan */
     :root {{
-        --background-color: {PALETTE['platinum']} !important;
-        --secondary-background-color: #ffffff !important;
-        --text-color: {PALETTE['midnight_violet']} !important;
-        --primary-color: {PALETTE['fiery_terracotta']} !important;
+        --background-color: {THEME_BG} !important;
+        --secondary-background-color: {THEME_CARD_BG} !important;
+        --text-color: {THEME_TEXT} !important;
+        --primary-color: {current_theme['accent']} !important;
     }}
 
-    /* 2. Menyembunyikan tombol menu opsi bawaan di kanan atas untuk mematikan akses ke theme switcher */
     [data-testid="stMainMenu"] {{
         visibility: hidden !important;
     }}
     
-    /* Mengubah Background Utama Halaman Website (Platinum) */
+    /* Background & Teks Utama */
     [data-testid="stAppViewContainer"] {{
         background-color: {THEME_BG} !important;
+        color: {THEME_TEXT} !important;
     }}
     
-    /* Membuat Area Atas/Header Menjadi Transparan */
     [data-testid="stHeader"] {{
         background-color: rgba(0, 0, 0, 0) !important;
     }}
     
-    /* Mengubah Background Menu/Sidebar (Fiery Terracotta) */
+    /* Sidebar Styling */
     [data-testid="stSidebar"] {{
-        background-color: {PALETTE['fiery_terracotta']} !important;
+        background-color: {current_theme['sidebar_bg']} !important;
     }}
     
-    /* Mengatur Semua Teks Kontrol di Sidebar menggunakan Platinum agar Kontras */
-    [data-testid="stSidebar"] p, 
     [data-testid="stSidebar"] h2, 
     [data-testid="stSidebar"] label,
-    [data-testid="stSidebar"] span,
+    [data-testid="stSidebar"] label p,
     [data-testid="stSidebar"] .stSelectbox label p,
-    [data-testid="stSidebar"] .stMultiSelect label p {{
-        color: {PALETTE['platinum']} !important;
+    [data-testid="stSidebar"] .stMultiSelect label p,
+    [data-testid="stSidebar"] .stDateInput label p {{
+        color: {current_theme['sidebar_text']} !important;
         font-weight: 600 !important;
     }}
     
-    /* Tipografi Responsif halaman utama */
+    /* FIX: Input Controls, Selectboxes, Multiselect, & Date Inputs in Sidebar */
+    [data-testid="stSidebar"] div[data-baseweb="input"] input,
+    [data-testid="stSidebar"] div[data-baseweb="select"] div,
+    [data-testid="stSidebar"] div[data-baseweb="base-input"] input,
+    [data-testid="stSidebar"] div[data-baseweb="select"] span {{
+        color: {current_theme['input_text']} !important;
+        background-color: {current_theme['input_bg']} !important;
+    }}
+
+    /* FIX: Date Picker Dialog & Calendar Popover (Prevent White text on White BG) */
+    div[data-baseweb="popover"],
+    div[data-baseweb="calendar"],
+    div[role="dialog"] {{
+        background-color: #ffffff !important;
+        color: #0f172a !important;
+        border-radius: 8px !important;
+        box-shadow: 0px 4px 16px rgba(0,0,0,0.15) !important;
+    }}
+    div[data-baseweb="popover"] *,
+    div[role="dialog"] * {{
+        color: #0f172a !important;
+    }}
+    div[data-baseweb="calendar"] button[aria-selected="true"] {{
+        background-color: {current_theme['accent']} !important;
+        color: #ffffff !important;
+    }}
+    
+    /* Tipografi Responsif */
     html, body, [class*="css"] {{
         font-family: 'Inter', sans-serif;
     }}
@@ -138,7 +227,7 @@ def load_data(file_path):
 
 
 # ==========================================
-# FUNCTION: KOTAK KPI (WHITE BACKGROUND)
+# FUNCTION: KOTAK KPI
 # ==========================================
 def create_kpi_card(title, value, color_top_border):
     st.markdown(f"""
@@ -147,7 +236,7 @@ def create_kpi_card(title, value, color_top_border):
         padding: clamp(10px, 1.5vw, 20px);
         border-radius: 12px;
         border-top: 5px solid {color_top_border};
-        box-shadow: 0px 4px 20px rgba(0, 0, 0, 0.05);
+        box-shadow: 0px 4px 20px rgba(0, 0, 0, 0.08);
         text-align: center;
         margin-bottom: 15px;
         display: flex;
@@ -161,7 +250,7 @@ def create_kpi_card(title, value, color_top_border):
             margin: 0; 
             font-weight: 700; 
             text-transform: uppercase;
-            opacity: 0.7;
+            opacity: 0.8;
             letter-spacing: 0.8px;
             word-wrap: break-word;
         ">{title}</p>
@@ -180,7 +269,7 @@ def create_kpi_card(title, value, color_top_border):
 # ==========================================
 # 3. SIDEBAR SELEKSI DATASET & FILTER
 # ==========================================
-st.sidebar.markdown(f"<h2 style='color:{PALETTE['platinum']}; margin-top:0; font-weight:800;'>📂 Proyek Data</h2>", unsafe_allow_html=True)
+st.sidebar.markdown(f"<h2 style='color:{current_theme['sidebar_text']}; margin-top:15px; font-weight:800;'>📂 Proyek Data</h2>", unsafe_allow_html=True)
 
 dataset_mapping = {
     "Koperasi Desa Merah Putih (KDMP)": os.path.join(BASE_DIR, "KDMP.csv"),
@@ -190,8 +279,8 @@ dataset_mapping = {
 selected_project = st.sidebar.selectbox("Topik Analisis:", options=list(dataset_mapping.keys()))
 df = load_data(dataset_mapping[selected_project])
 
-st.sidebar.markdown("<hr style='border-top: 2px solid #eef0f2 !important; opacity:0.3;'>", unsafe_allow_html=True)
-st.sidebar.markdown(f"<h2 style='color:{PALETTE['platinum']}; font-weight:800;'>🕹️ Kendali Filter</h2>", unsafe_allow_html=True)
+st.sidebar.markdown("<hr style='border-top: 2px solid opacity:0.3;'>", unsafe_allow_html=True)
+st.sidebar.markdown(f"<h2 style='color:{current_theme['sidebar_text']}; font-weight:800;'>🕹️ Kendali Filter</h2>", unsafe_allow_html=True)
 
 min_date_dataset = df['date_only'].min()
 max_date_dataset = df['date_only'].max()
@@ -229,12 +318,6 @@ filtered_df = df[mask]
 clean_filtered_df = filtered_df[filtered_df[active_column].notna() & (filtered_df[active_column] != 'empty')]
 kpi_stats = clean_filtered_df[active_column].value_counts()
 
-color_map = {
-    'positif': PALETTE['fern'],
-    'netral': PALETTE['tuscan_sun'],
-    'negatif': PALETTE['fiery_terracotta']
-}
-
 
 # ==========================================
 # 5. SECTION 1: HEADER & KPI CARDS (ATAS)
@@ -246,20 +329,20 @@ st.markdown("<hr>", unsafe_allow_html=True)
 # Baris 1: Ringkasan Umum
 row1_col1, row1_col2, row1_col3 = st.columns(3)
 with row1_col1:
-    create_kpi_card("💬 Total Komentar Bersih", f"{len(clean_filtered_df):,}", PALETTE['fiery_terracotta'])
+    create_kpi_card("💬 Total Komentar Bersih", f"{len(clean_filtered_df):,}", current_theme['negatif'])
 with row1_col2:
-    create_kpi_card("📹 Distribusi Video", f"{clean_filtered_df['video_id'].nunique()}", PALETTE['fiery_terracotta'])
+    create_kpi_card("📹 Distribusi Video", f"{clean_filtered_df['video_id'].nunique()}", current_theme['accent'])
 with row1_col3:
-    create_kpi_card("👥 Pengguna Unik", f"{clean_filtered_df['username'].nunique():,}", PALETTE['fiery_terracotta'])
+    create_kpi_card("👥 Pengguna Unik", f"{clean_filtered_df['username'].nunique():,}", current_theme['accent'])
 
 # Baris 2: Statistik Sentimen
 row2_col1, row2_col2, row2_col3 = st.columns(3)
 with row2_col1:
-    create_kpi_card("🟢 Respon Positif", f"{kpi_stats.get('positif', 0):,}", PALETTE['fern'])
+    create_kpi_card("🟢 Respon Positif", f"{kpi_stats.get('positif', 0):,}", current_theme['positif'])
 with row2_col2:
-    create_kpi_card("🟡 Respon Netral", f"{kpi_stats.get('netral', 0):,}", PALETTE['tuscan_sun'])
+    create_kpi_card("🟡 Respon Netral", f"{kpi_stats.get('netral', 0):,}", current_theme['netral'])
 with row2_col3:
-    create_kpi_card("🔴 Respon Negatif", f"{kpi_stats.get('negatif', 0):,}", PALETTE['fiery_terracotta'])
+    create_kpi_card("🔴 Respon Negatif", f"{kpi_stats.get('negatif', 0):,}", current_theme['negatif'])
 
 st.markdown("<hr>", unsafe_allow_html=True)
 
@@ -373,19 +456,19 @@ st.markdown(f"<h3 style='color: {THEME_TEXT}; font-weight:800;'>☁️ Ringkasan
 
 if filtered_words:
     def custom_color_func(word, font_size, position, orientation, random_state=None, **kwargs):
-        return random.choice([PALETTE['midnight_violet'], PALETTE['fiery_terracotta'], PALETTE['fern']])
+        return random.choice([current_theme['text_color'], current_theme['positif'], current_theme['negatif']])
 
     wordcloud = WordCloud(
         width=1200,
         height=500,
-        background_color='#ffffff',
+        background_color=current_theme['card_bg'],
         collocations=False,
         color_func=custom_color_func
     ).generate_from_frequencies(word_counts)
 
     fig_wc, ax_wc = plt.subplots(figsize=(14, 6))
-    fig_wc.patch.set_facecolor('#ffffff')
-    ax_wc.set_facecolor('#ffffff')
+    fig_wc.patch.set_facecolor(current_theme['card_bg'])
+    ax_wc.set_facecolor(current_theme['card_bg'])
     ax_wc.imshow(wordcloud, interpolation='bilinear')
     ax_wc.axis("off")
     plt.tight_layout(pad=0)
@@ -407,7 +490,7 @@ if filtered_words:
     
     fig_words = px.bar(
         top_words, x='Frekuensi', y='Kata', orientation='h',
-        color_discrete_sequence=[PALETTE['midnight_violet']],
+        color_discrete_sequence=[current_theme['accent']],
         title="Distribusi Frekuensi Kata Kunci Hasil Preprocessing"
     )
     fig_words.update_traces(hovertemplate="<b>Kata:</b> %{y}<br><b>Frekuensi:</b> %{x:,} kali<extra></extra>")
@@ -436,7 +519,7 @@ if not clean_filtered_df.empty and 'username' in clean_filtered_df.columns:
     
     fig_users = px.bar(
         user_counts, x='Jumlah Komentar', y='Username', orientation='h',
-        color_discrete_sequence=[PALETTE['fiery_terracotta']],
+        color_discrete_sequence=[current_theme['negatif']],
         title="Volume Keaktifan Akun Pengguna Media Sosial"
     )
     fig_users.update_traces(hovertemplate="<b>Username:</b> @%{y}<br><b>Total Post:</b> %{x:,} komentar<extra></extra>")
