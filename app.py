@@ -33,7 +33,6 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 # 1. KONFIGURASI HALAMAN WEBSITE
 # ==========================================
 st.set_page_config(
-    page_title="Data Science Portfolio Hub",
     page_title="Public Opinion Sentiment Analysis",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -184,8 +183,6 @@ def create_kpi_card(title, value, color_top_border):
 st.sidebar.markdown(f"<h2 style='color:{PALETTE['platinum']}; margin-top:0; font-weight:800;'>📂 Proyek Data</h2>", unsafe_allow_html=True)
 
 dataset_mapping = {
-    "Koperasi Desa Merah Putih (KDMP)": "KDMP.csv",
-    "Makan Bergizi Gratis (MBG)": "MBG_PROCESSED.csv"
     "Koperasi Desa Merah Putih (KDMP)": os.path.join(BASE_DIR, "KDMP.csv"),
     "Makan Bergizi Gratis (MBG)": os.path.join(BASE_DIR, "MBG_PROCESSED.csv")
 }
